@@ -1,43 +1,54 @@
+/// Priority enum — like Kotlin enum class
+/// Dart 3 enums can have fields and methods, just like Kotlin!
+enum TaskPriority {
+  low('Low', 0),
+  medium('Medium', 1),
+  high('High', 2);
+
+  final String label;
+  final int value;
+
+  const TaskPriority(this.label, this.value);
+}
+
 /// Task model — the core data class for TaskFlow.
-///
-/// In Kotlin, this would be a `data class`.
-/// Dart doesn't auto-generate equals/hashCode/copy,
-/// so we do it manually (or use the `equatable` package later).
 class Task {
   final String id;
   final String title;
   final String? description;
   final bool isCompleted;
+  final TaskPriority priority;
   final DateTime createdAt;
 
-  // Dart shorthand constructor — `this.` auto-assigns fields
-  // In Kotlin: class Task(val id: String, val title: String, ...)
   const Task({
     required this.id,
     required this.title,
     this.description,
     this.isCompleted = false,
+    this.priority = TaskPriority.medium,
     required this.createdAt,
   });
 
-  // Named constructor — factory for quick creation
-  // No Kotlin equivalent; closest is companion object factory
-  factory Task.create({required String title, String? description}) {
+  factory Task.create({
+    required String title,
+    String? description,
+    TaskPriority priority = TaskPriority.medium,
+  }) {
     return Task(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       title: title,
       description: description,
+      priority: priority,
       createdAt: DateTime.now(),
     );
   }
 
-  // copyWith — Kotlin data classes get this for free
-  // In Dart, we write it manually
   Task copyWith({
     String? id,
     String? title,
     String? description,
     bool? isCompleted,
+    TaskPriority? priority,
     DateTime? createdAt,
   }) {
     return Task(
@@ -45,11 +56,11 @@ class Task {
       title: title ?? this.title,
       description: description ?? this.description,
       isCompleted: isCompleted ?? this.isCompleted,
+      priority: priority ?? this.priority,
       createdAt: createdAt ?? this.createdAt,
     );
   }
 
-  // Toggle convenience method
   Task toggleComplete() => copyWith(isCompleted: !isCompleted);
 
   @override

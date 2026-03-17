@@ -1,14 +1,20 @@
 import 'package:flutter/material.dart';
 import '../models/task.dart';
+import '../models/detail_result.dart';
 import '../widgets/task_tile.dart';
+import 'add_task_screen.dart';
+import 'task_detail_screen.dart';
 
-/// HomeScreen — our main screen showing the task list.
+/// HomeScreen — now with NAVIGATION!
 ///
-/// This is a StatefulWidget because it holds mutable state (the task list).
+/// NAVIGATION IN FLUTTER vs ANDROID:
+/// Android: NavController + NavGraph (declarative destinations)
+/// Flutter: Navigator + Route (imperative push/pop stack)
 ///
-/// ANATOMY OF A STATEFULWIDGET:
-/// 1. The Widget class itself (immutable config — like XML layout in Android)
-/// 2. The State class (mutable state + build logic — like Activity/Fragment)
+/// Navigator works like a Stack:
+///   push()  → add screen on top  (like startActivity)
+///   pop()   → remove top screen  (like finish() or back press)
+///   push() returns a Future, so you can await results from the next screen!
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -17,157 +23,186 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  // Our task list — starts with some dummy data
   final List<Task> _tasks = [
-    Task.create(title: 'Learn Flutter widgets', description: 'Rows, Columns, Stacks'),
-    Task.create(title: 'Build TaskFlow UI', description: 'Home screen with task list'),
-    Task.create(title: 'Add state management', description: 'Provider or Riverpod'),
+    Task.create(
+      title: 'Learn Flutter widgets',
+      description: 'Rows, Columns, Stacks',
+      priority: TaskPriority.high,
+    ),
+    Task.create(
+      title: 'Build TaskFlow UI',
+      description: 'Home screen with task list',
+      priority: TaskPriority.medium,
+    ),
+    Task.create(
+      title: 'Add state management',
+      description: 'Provider or Riverpod',
+      priority: TaskPriority.low,
+    ),
   ];
 
-  /// Add a new task
-  void _addTask(String title) {
+  /// Navigate to AddTaskScreen and wait for the result.
+  ///
+  /// NAVIGATION PATTERN:
+  /// 1. push() a new MaterialPageRoute (creates a new screen)
+  /// 2. The new screen calls pop(result) when done
+  /// 3. We get the result back here via await
+  ///
+  /// This is like startActivityForResult() but MUCH cleaner!
+  Future<void> _navigateToAddTask() async {
+    // push() returns whatever the pushed screen passes to pop()
+    final newTask = await Navigator.of(context).push<Task>(
+      MaterialPageRoute(
+        builder: (context) => const AddTaskScreen(),
+      ),
+    );
+
+    // If user cancelled (pressed back), newTask is null
+    if (newTask != null) {
+      setState(() => _tasks.insert(0, newTask));
+    }
+  }
+
+  /// Navigate to TaskDetailScreen to view/edit a task.
+  Future<void> _navigateToDetail(int index) async {
+    final result = await Navigator.of(context).push<DetailResult>(
+      MaterialPageRoute(
+        builder: (context) => TaskDetailScreen(task: _tasks[index]),
+      ),
+    );
+
+    // result is null ONLY on back press (cancelled) — do nothing!
+    // Sealed class gives us exhaustive checking, just like Kotlin's `when`
+    if (result == null) return; // ← back pressed, task stays untouched
+
     setState(() {
-      // setState() tells Flutter: "state changed, rebuild UI"
-      // Similar to LiveData.postValue() or MutableState in Compose
-      _tasks.insert(0, Task.create(title: title));
+      switch (result) {
+        case TaskUpdated(:final task):
+          _tasks[index] = task;
+        case TaskDeleted():
+          _tasks.removeAt(index);
+      }
     });
   }
 
-  /// Toggle task completion
   void _toggleTask(int index) {
     setState(() {
       _tasks[index] = _tasks[index].toggleComplete();
     });
   }
 
-  /// Delete a task
   void _deleteTask(int index) {
-    setState(() {
-      _tasks.removeAt(index);
-    });
-  }
+    // Save reference for undo
+    final deleted = _tasks[index];
+    setState(() => _tasks.removeAt(index));
 
-  /// Show dialog to add a new task
-  void _showAddTaskDialog() {
-    final controller = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('New Task'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'What needs to be done?',
-            border: OutlineInputBorder(),
-          ),
-          // Submit on Enter key
-          onSubmitted: (value) {
-            if (value.trim().isNotEmpty) {
-              _addTask(value.trim());
-              Navigator.of(ctx).pop();
-            }
+    // SNACKBAR — like Android's Snackbar with undo action
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('"${deleted.title}" deleted'),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () {
+            setState(() => _tasks.insert(index, deleted));
           },
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (controller.text.trim().isNotEmpty) {
-                _addTask(controller.text.trim());
-                Navigator.of(ctx).pop();
-              }
-            },
-            child: const Text('Add'),
-          ),
-        ],
+        duration: const Duration(seconds: 3),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    // Separate completed and pending tasks
     final pending = _tasks.where((t) => !t.isCompleted).toList();
     final completed = _tasks.where((t) => t.isCompleted).toList();
 
-    /// WIDGET TREE CONCEPT:
-    /// Scaffold → AppBar + Body + FAB
-    ///   └── Body: ListView
-    ///         └── TaskTile (repeated)
-    ///
-    /// Think of it like nested XML layouts, but in code.
     return Scaffold(
-      // AppBar — like Toolbar in Android
       appBar: AppBar(
         title: const Text('TaskFlow'),
         centerTitle: true,
-      ),
-
-      // Body — the main content area
-      body: _tasks.isEmpty
-          ? const Center(
+        actions: [
+          // Task count badge
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.only(right: 16),
               child: Text(
-                'No tasks yet.\nTap + to add one!',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 18, color: Colors.grey),
+                '${pending.length} pending',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.primary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+      body: _tasks.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.task_alt, size: 64, color: Colors.grey.shade300),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'No tasks yet.\nTap + to add one!',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 18, color: Colors.grey),
+                  ),
+                ],
               ),
             )
           : ListView(
               padding: const EdgeInsets.symmetric(vertical: 8),
               children: [
-                // Pending tasks
                 if (pending.isNotEmpty) ...[
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Text(
-                      'Pending (${pending.length})',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                    ),
-                  ),
+                  _sectionHeader(context, 'Pending', pending.length, false),
                   ...pending.map((task) {
                     final index = _tasks.indexOf(task);
                     return TaskTile(
                       task: task,
                       onToggle: () => _toggleTask(index),
                       onDelete: () => _deleteTask(index),
+                      onTap: () => _navigateToDetail(index),
                     );
                   }),
                 ],
-
-                // Completed tasks
                 if (completed.isNotEmpty) ...[
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Text(
-                      'Completed (${completed.length})',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            color: Colors.grey,
-                          ),
-                    ),
-                  ),
+                  _sectionHeader(context, 'Completed', completed.length, true),
                   ...completed.map((task) {
                     final index = _tasks.indexOf(task);
                     return TaskTile(
                       task: task,
                       onToggle: () => _toggleTask(index),
                       onDelete: () => _deleteTask(index),
+                      onTap: () => _navigateToDetail(index),
                     );
                   }),
                 ],
               ],
             ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _navigateToAddTask,
+        icon: const Icon(Icons.add),
+        label: const Text('Add Task'),
+      ),
+    );
+  }
 
-      // FAB — Floating Action Button, same concept as Android
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddTaskDialog,
-        child: const Icon(Icons.add),
+  Widget _sectionHeader(
+    BuildContext context,
+    String title,
+    int count,
+    bool isCompleted,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Text(
+        '$title ($count)',
+        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+              color: isCompleted
+                  ? Colors.grey
+                  : Theme.of(context).colorScheme.primary,
+            ),
       ),
     );
   }
