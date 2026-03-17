@@ -20,7 +20,7 @@ class Task {
   final TaskPriority priority;
   final DateTime createdAt;
 
-  const Task({
+  Task({
     required this.id,
     required this.title,
     this.description,
@@ -34,12 +34,15 @@ class Task {
     String? description,
     TaskPriority priority = TaskPriority.medium,
   }) {
+    final now = DateTime.now();
     return Task(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      // microseconds gives us much finer granularity than milliseconds,
+      // plus hashCode of the title adds extra uniqueness
+      id: '${now.microsecondsSinceEpoch}_${title.hashCode.abs()}',
       title: title,
       description: description,
       priority: priority,
-      createdAt: DateTime.now(),
+      createdAt: now,
     );
   }
 
@@ -68,8 +71,15 @@ class Task {
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) || (other is Task && other.id == id);
+      identical(this, other) ||
+      (other is Task &&
+          other.id == id &&
+          other.title == title &&
+          other.description == description &&
+          other.isCompleted == isCompleted &&
+          other.priority == priority &&
+          other.createdAt == createdAt);
 
   @override
-  int get hashCode => id.hashCode;
+  int get hashCode => Object.hash(id, title, description, isCompleted, priority, createdAt);
 }

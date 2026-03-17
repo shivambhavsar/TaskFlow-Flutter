@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'bloc/bloc.dart';
 import 'screens/home_screen.dart';
 
 /// Entry point — like `fun main()` in Kotlin
@@ -9,37 +11,51 @@ void main() {
 
 /// Root widget of our app.
 ///
-/// KEY CONCEPT: Everything in Flutter is a Widget.
-/// - StatelessWidget = doesn't hold mutable state (like a Compose function with no remember{})
-/// - StatefulWidget  = holds mutable state (like a Compose function with remember{})
+/// BLOCPROVIDER — the dependency injection point.
 ///
-/// MaterialApp is Flutter's equivalent of Android's Theme + Navigation host.
+/// Android equivalent: this is like Hilt's @HiltAndroidApp + ViewModelProvider.
+/// BlocProvider creates the Bloc and makes it available to ALL descendants
+/// via BuildContext (remember context chaining from our earlier discussion!).
+///
+/// Widget tree:
+///   BlocProvider<TaskBloc>     ← creates & holds the Bloc instance
+///     └── MaterialApp
+///           └── HomeScreen    ← can access TaskBloc via context.read<TaskBloc>()
+///                 └── TaskTile  ← can also access it! (context chains up)
 class TaskFlowApp extends StatelessWidget {
   const TaskFlowApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'TaskFlow',
-      debugShowCheckedModeBanner: false,
+    return BlocProvider(
+      // create: is called once — like ViewModelProvider.Factory
+      // The Bloc lives as long as this widget is in the tree
+      create: (context) => TaskBloc()..add(LoadTasks()),
+      //                              ^^
+      // Dart cascade operator (..) — calls add() and returns the Bloc.
+      // Like Kotlin's apply { add(LoadTasks()) }
+      // This fires LoadTasks immediately after creation.
 
-      // Theme — like Material Theme in Android
-      theme: ThemeData(
-        colorSchemeSeed: Colors.indigo,   // primary color family
-        useMaterial3: true,               // Material 3 / Material You
-        brightness: Brightness.light,
+      child: MaterialApp(
+        title: 'TaskFlow',
+        debugShowCheckedModeBanner: false,
+
+        theme: ThemeData(
+          colorSchemeSeed: Colors.indigo,
+          useMaterial3: true,
+          brightness: Brightness.light,
+        ),
+
+        darkTheme: ThemeData(
+          colorSchemeSeed: Colors.indigo,
+          useMaterial3: true,
+          brightness: Brightness.dark,
+        ),
+
+        themeMode: ThemeMode.system,
+
+        home: const HomeScreen(),
       ),
-
-      darkTheme: ThemeData(
-        colorSchemeSeed: Colors.indigo,
-        useMaterial3: true,
-        brightness: Brightness.dark,
-      ),
-
-      // Follows system dark mode setting
-      themeMode: ThemeMode.system,
-
-      home: const HomeScreen(),
     );
   }
 }

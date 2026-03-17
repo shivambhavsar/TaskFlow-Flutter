@@ -32,3 +32,4 @@ local.properties
 # Misc
 *.log
 pubspec.lock
+PUBSPEC_CHANGES.md
